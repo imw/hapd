@@ -498,7 +498,7 @@ static enum ssid_match_result ssid_match(struct hostapd_data *hapd,
 
 void handle_probe_req(struct hostapd_data *hapd,
 		      const struct ieee80211_mgmt *mgmt, size_t len,
-		      int ssi_signal)
+		      struct hostapd_frame_info *fi)
 {
 	u8 *resp;
 	struct ieee802_11_elems elems;
@@ -506,8 +506,14 @@ void handle_probe_req(struct hostapd_data *hapd,
 	size_t ie_len;
 	struct sta_info *sta = NULL;
 	size_t i, resp_len;
+	int ssi_signal = fi->ssi_signal;
 	int noack;
 	enum ssid_match_result res;
+	struct hostapd_ubus_request req = {
+		.type = HOSTAPD_UBUS_PROBE_REQ,
+		.mgmt_frame = mgmt,
+		.frame_info = fi,
+	};
 
 	ie = mgmt->u.probe_req.variable;
 	if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.probe_req))
@@ -599,6 +605,10 @@ void handle_probe_req(struct hostapd_data *hapd,
 		return;
 	}
 
+	if (!sta && hapd->num_sta >= hapd->conf->max_num_sta)
+		wpa_printf(MSG_MSGDUMP, "Probe Request from " MACSTR " ignored,"
+			   " too many connected stations.", MAC2STR(mgmt->sa));
+
 #ifdef CONFIG_INTERWORKING
 	if (hapd->conf->interworking &&
 	    elems.interworking && elems.interworking_len >= 1) {
@@ -640,6 +650,12 @@ void handle_probe_req(struct hostapd_data *hapd,
 		return;
 	}
 #endif /* CONFIG_P2P */
+
+	if (hostapd_ubus_handle_event(hapd, &req)) {
+		wpa_printf(MSG_DEBUG, "Probe request for " MACSTR " rejected by ubus handler.\n",
+		       MAC2STR(mgmt->sa));
+		return;
+	}
 
 	/* TODO: verify that supp_rates contains at least one matching rate
 	 * with AP configuration */

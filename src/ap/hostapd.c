@@ -22,6 +22,7 @@
 #include "beacon.h"
 #include "iapp.h"
 #include "ieee802_1x.h"
+#include "ieee802_11.h"
 #include "ieee802_11_auth.h"
 #include "vlan_init.h"
 #include "wpa_auth.h"
@@ -68,6 +69,16 @@ static void hostapd_reload_bss(struct hostapd_data *hapd)
 #endif /* CONFIG_NO_RADIUS */
 
 	ssid = &hapd->conf->ssid;
+
+	hostapd_set_freq(hapd, hapd->iconf->hw_mode, hapd->iface->freq,
+			 hapd->iconf->channel,
+			 hapd->iconf->ieee80211n,
+			 hapd->iconf->ieee80211ac,
+			 hapd->iconf->secondary_channel,
+			 hapd->iconf->vht_oper_chwidth,
+			 hapd->iconf->vht_oper_centr_freq_seg0_idx,
+			 hapd->iconf->vht_oper_centr_freq_seg1_idx);
+
 	if (!ssid->wpa_psk_set && ssid->wpa_psk && !ssid->wpa_psk->next &&
 	    ssid->wpa_passphrase_set && ssid->wpa_passphrase) {
 		/*
@@ -168,20 +179,12 @@ int hostapd_reload_config(struct hostapd_iface *iface)
 	oldconf = hapd->iconf;
 	iface->conf = newconf;
 
+	if (iface->conf->channel)
+		iface->freq = hostapd_hw_get_freq(hapd, iface->conf->channel);
+
 	for (j = 0; j < iface->num_bss; j++) {
 		hapd = iface->bss[j];
 		hapd->iconf = newconf;
-		hapd->iconf->channel = oldconf->channel;
-		hapd->iconf->secondary_channel = oldconf->secondary_channel;
-		hapd->iconf->ieee80211n = oldconf->ieee80211n;
-		hapd->iconf->ieee80211ac = oldconf->ieee80211ac;
-		hapd->iconf->ht_capab = oldconf->ht_capab;
-		hapd->iconf->vht_capab = oldconf->vht_capab;
-		hapd->iconf->vht_oper_chwidth = oldconf->vht_oper_chwidth;
-		hapd->iconf->vht_oper_centr_freq_seg0_idx =
-			oldconf->vht_oper_centr_freq_seg0_idx;
-		hapd->iconf->vht_oper_centr_freq_seg1_idx =
-			oldconf->vht_oper_centr_freq_seg1_idx;
 		hapd->conf = newconf->bss[j];
 		hostapd_reload_bss(hapd);
 	}
@@ -258,6 +261,7 @@ static void hostapd_free_hapd_data(struct hostapd_data *hapd)
 	hapd->started = 0;
 
 	wpa_printf(MSG_DEBUG, "%s(%s)", __func__, hapd->conf->iface);
+	hostapd_ubus_free_bss(hapd);
 	iapp_deinit(hapd->iapp);
 	hapd->iapp = NULL;
 	accounting_deinit(hapd);
@@ -326,6 +330,7 @@ static void hostapd_cleanup(struct hostapd_data *hapd)
 static void hostapd_cleanup_iface_partial(struct hostapd_iface *iface)
 {
 	wpa_printf(MSG_DEBUG, "%s(%p)", __func__, iface);
+	hostapd_deinit_ht(iface);
 	hostapd_free_hw_features(iface->hw_features, iface->num_hw_features);
 	iface->hw_features = NULL;
 	os_free(iface->current_rates);
@@ -860,6 +865,8 @@ static int hostapd_setup_bss(struct hostapd_data *hapd, int first)
 	if (hapd->driver && hapd->driver->set_operstate)
 		hapd->driver->set_operstate(hapd->drv_priv, 1);
 
+	hostapd_ubus_add_bss(hapd);
+
 	return 0;
 }
 
@@ -1150,6 +1157,7 @@ int hostapd_setup_interface_complete(struct hostapd_iface *iface, int err)
 	if (err)
 		goto fail;
 
+	hostapd_ubus_add_iface(iface);
 	wpa_printf(MSG_DEBUG, "Completing interface initialization");
 	if (iface->conf->channel) {
 #ifdef NEED_AP_MLME
@@ -1261,6 +1269,7 @@ int hostapd_setup_interface_complete(struct hostapd_iface *iface, int err)
 
 fail:
 	wpa_printf(MSG_ERROR, "Interface initialization failed");
+	hostapd_ubus_free_iface(iface);
 	hostapd_set_state(iface, HAPD_IFACE_DISABLED);
 	wpa_msg(hapd->msg_ctx, MSG_INFO, AP_EVENT_DISABLED);
 	if (iface->interfaces && iface->interfaces->terminate_on_error)
@@ -1583,6 +1592,7 @@ void hostapd_interface_deinit_free(struct hostapd_iface *iface)
 		   (unsigned int) iface->conf->num_bss);
 	driver = iface->bss[0]->driver;
 	drv_priv = iface->bss[0]->drv_priv;
+	hostapd_ubus_free_iface(iface);
 	hostapd_interface_deinit(iface);
 	wpa_printf(MSG_DEBUG, "%s: driver=%p drv_priv=%p -> hapd_deinit",
 		   __func__, driver, drv_priv);

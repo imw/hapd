@@ -6075,6 +6075,7 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 			reply_len = -1;
 	} else if (os_strncmp(buf, "NOTE ", 5) == 0) {
 		wpa_printf(MSG_INFO, "NOTE: %s", buf + 5);
+#ifdef CONFIG_CTRL_IFACE_MIB
 	} else if (os_strcmp(buf, "MIB") == 0) {
 		reply_len = wpa_sm_get_mib(wpa_s->wpa, reply, reply_size);
 		if (reply_len >= 0) {
@@ -6086,6 +6087,7 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 			else
 				reply_len += res;
 		}
+#endif
 	} else if (os_strncmp(buf, "STATUS", 6) == 0) {
 		reply_len = wpa_supplicant_ctrl_iface_status(
 			wpa_s, buf + 6, reply, reply_size);
@@ -6490,6 +6492,7 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 		reply_len = wpa_supplicant_ctrl_iface_bss(
 			wpa_s, buf + 4, reply, reply_size);
 #ifdef CONFIG_AP
+#ifdef CONFIG_CTRL_IFACE_MIB
 	} else if (os_strcmp(buf, "STA-FIRST") == 0) {
 		reply_len = ap_ctrl_iface_sta_first(wpa_s, reply, reply_size);
 	} else if (os_strncmp(buf, "STA ", 4) == 0) {
@@ -6498,6 +6501,7 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 	} else if (os_strncmp(buf, "STA-NEXT ", 9) == 0) {
 		reply_len = ap_ctrl_iface_sta_next(wpa_s, buf + 9, reply,
 						   reply_size);
+#endif
 	} else if (os_strncmp(buf, "DEAUTHENTICATE ", 15) == 0) {
 		if (ap_ctrl_iface_sta_deauthenticate(wpa_s, buf + 15))
 			reply_len = -1;

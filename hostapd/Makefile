@@ -14,6 +14,7 @@ CFLAGS += -I$(abspath ../src/utils)
 # CFLAGS += -DUSE_KERNEL_HEADERS -I/usr/src/linux/include
 
 -include .config
+-include $(if $(MULTICALL), ../wpa_supplicant/.config)
 
 ifdef CONFIG_TESTING_OPTIONS
 CFLAGS += -DCONFIG_TESTING_OPTIONS
@@ -115,6 +116,11 @@ OBJS += ../src/common/wpa_common.o
 
 OBJS += ../src/eapol_auth/eapol_auth_sm.o
 
+ifdef CONFIG_UBUS
+CFLAGS += -DUBUS_SUPPORT
+OBJS += ../src/ap/ubus.o
+LIBS += -lubox -lubus
+endif
 
 ifdef CONFIG_CODE_COVERAGE
 CFLAGS += -O0 -fprofile-arcs -ftest-coverage
@@ -162,6 +168,9 @@ endif
 ifdef CONFIG_NO_CTRL_IFACE
 CFLAGS += -DCONFIG_NO_CTRL_IFACE
 else
+ifdef CONFIG_CTRL_IFACE_MIB
+CFLAGS += -DCONFIG_CTRL_IFACE_MIB
+endif
 OBJS += ctrl_iface.o
 OBJS += ../src/ap/ctrl_iface_ap.o
 endif
@@ -223,10 +232,14 @@ ifdef CONFIG_IEEE80211AC
 CFLAGS += -DCONFIG_IEEE80211AC
 endif
 
+ifndef MULTICALL
+CFLAGS += -DNO_SUPPLICANT
+endif
+
 include ../src/drivers/drivers.mak
-OBJS += $(DRV_AP_OBJS)
-CFLAGS += $(DRV_AP_CFLAGS)
-LDFLAGS += $(DRV_AP_LDFLAGS)
+OBJS += $(sort $(DRV_AP_OBJS) $(if $(MULTICALL),$(DRV_WPA_OBJS)))
+CFLAGS += $(DRV_AP_CFLAGS) $(if $(MULTICALL),$(DRV_WPA_CFLAGS))
+LDFLAGS += $(DRV_AP_LDFLAGS) $(if $(MULTICALL),$(DRV_WPA_LDFLAGS))
 LIBS += $(DRV_AP_LIBS)
 
 ifdef CONFIG_L2_PACKET
@@ -913,6 +926,12 @@ install: all
 
 BCHECK=../src/drivers/build.hostapd
 
+hostapd_multi.a: $(BCHECK) $(OBJS)
+	$(Q)$(CC) -c -o hostapd_multi.o -Dmain=hostapd_main $(CFLAGS) main.c
+	@$(E) "  CC " $<
+	@rm -f $@
+	@$(AR) cr $@ hostapd_multi.o $(OBJS)
+
 hostapd: $(BCHECK) $(OBJS)
 	$(Q)$(CC) $(LDFLAGS) -o hostapd $(OBJS) $(LIBS)
 	@$(E) "  LD " $@
@@ -950,6 +969,12 @@ ifdef CONFIG_INTERNAL_AES
 HOBJS += ../src/crypto/aes-internal.o
 HOBJS += ../src/crypto/aes-internal-enc.o
 endif
+
+dump_cflags:
+	@echo -n $(CFLAGS) " "
+
+dump_ldflags:
+	@echo -n $(LDFLAGS) $(LIBS) $(EXTRALIBS) " "
 
 nt_password_hash: $(NOBJS)
 	$(Q)$(CC) $(LDFLAGS) -o nt_password_hash $(NOBJS) $(LIBS_n)

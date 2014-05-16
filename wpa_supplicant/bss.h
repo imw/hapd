@@ -70,6 +70,8 @@ struct wpa_bss {
 	u8 ssid[32];
 	/** Length of SSID */
 	size_t ssid_len;
+	/** HT caapbilities */
+	u16 ht_capab;
 	/** Frequency of the channel in MHz (e.g., 2412 = channel 1) */
 	int freq;
 	/** Beacon interval in TUs (host byte order) */

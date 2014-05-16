@@ -19,6 +19,7 @@
 
 #define WPA_SUPPLICANT_DRIVER_VERSION 4
 
+#include "drivers/nl80211_copy.h"
 #include "common/defs.h"
 #include "utils/list.h"
 
@@ -413,6 +414,13 @@ struct wpa_driver_associate_params {
 	 * This can be %NULL, if ap_scan=2 mode is used and the driver is
 	 * responsible for selecting with which BSS to associate. */
 	const u8 *bssid;
+
+	int beacon_interval;
+	int fixed_freq;
+	unsigned char rates[NL80211_MAX_SUPP_RATES];
+	int mcast_rate;
+	int ht_set;
+	unsigned int htmode;
 
 	/**
 	 * bssid_hint - BSSID of a proposed AP
@@ -3886,8 +3894,8 @@ union wpa_event_data {
  * Driver wrapper code should call this function whenever an event is received
  * from the driver.
  */
-void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
-			  union wpa_event_data *data);
+extern void (*wpa_supplicant_event)(void *ctx, enum wpa_event_type event,
+				    union wpa_event_data *data);
 
 
 /*

@@ -2638,6 +2638,8 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 		}
 #endif /* CONFIG_IEEE80211W */
 #ifdef CONFIG_IEEE80211N
+	} else if (os_strcmp(buf, "noscan") == 0) {
+		conf->noscan = atoi(pos);
 	} else if (os_strcmp(buf, "ieee80211n") == 0) {
 		conf->ieee80211n = atoi(pos);
 	} else if (os_strcmp(buf, "ht_capab") == 0) {
@@ -2646,6 +2648,10 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 				   line);
 			return 1;
 		}
+	} else if (os_strcmp(buf, "dynamic_ht40") == 0) {
+		conf->dynamic_ht40 = atoi(pos);
+		if (conf->dynamic_ht40 == 1)
+			conf->dynamic_ht40 = 1500;
 	} else if (os_strcmp(buf, "require_ht") == 0) {
 		conf->require_ht = atoi(pos);
 	} else if (os_strcmp(buf, "obss_interval") == 0) {

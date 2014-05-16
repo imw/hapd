@@ -4748,18 +4748,20 @@ wpa_driver_nl80211_finish_drv_init(struct wpa_driver_nl80211_data *drv,
 }
 
 
-static int wpa_driver_nl80211_del_beacon(struct wpa_driver_nl80211_data *drv)
+static int wpa_driver_nl80211_del_bss_beacon(struct i802_bss *bss)
 {
+	struct wpa_driver_nl80211_data *drv = bss->drv;
 	struct nl_msg *msg;
 
 	msg = nlmsg_alloc();
 	if (!msg)
 		return -ENOMEM;
 
+	bss->beacon_set = 0;
 	wpa_printf(MSG_DEBUG, "nl80211: Remove beacon (ifindex=%d)",
-		   drv->ifindex);
+		   bss->ifindex);
 	nl80211_cmd(drv, msg, 0, NL80211_CMD_DEL_BEACON);
-	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, bss->ifindex);
 
 	return send_and_recv_msgs(drv, msg, NULL, NULL);
  nla_put_failure:
@@ -4767,6 +4769,15 @@ static int wpa_driver_nl80211_del_beacon(struct wpa_driver_nl80211_data *drv)
 	return -ENOBUFS;
 }
 
+static int wpa_driver_nl80211_del_beacon(struct wpa_driver_nl80211_data *drv)
+{
+	struct i802_bss *bss;
+
+	for (bss = drv->first_bss; bss; bss = bss->next)
+		wpa_driver_nl80211_del_bss_beacon(bss);
+
+	return 0;
+}
 
 /**
  * wpa_driver_nl80211_deinit - Deinitialize nl80211 driver interface
@@ -7380,7 +7391,7 @@ static int wpa_driver_nl80211_set_freq(struct i802_bss *bss,
 
 	nl80211_cmd(drv, msg, 0, NL80211_CMD_SET_WIPHY);
 
-	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, bss->ifindex);
 	if (nl80211_put_freq_params(msg, freq) < 0)
 		goto nla_put_failure;
 
@@ -8444,7 +8455,7 @@ static int wpa_driver_nl80211_ibss(struct wpa_driver_nl80211_data *drv,
 				   struct wpa_driver_associate_params *params)
 {
 	struct nl_msg *msg;
-	int ret = -1;
+	int ret = -1, i;
 	int count = 0;
 
 	wpa_printf(MSG_DEBUG, "nl80211: Join IBSS (ifindex=%d)", drv->ifindex);
@@ -8481,6 +8492,53 @@ retry:
 		wpa_printf(MSG_DEBUG, "  * beacon_int=%d", params->beacon_int);
 		NLA_PUT_U32(msg, NL80211_ATTR_BEACON_INTERVAL,
 			    params->beacon_int);
+	}
+
+	if (params->fixed_freq) {
+		wpa_printf(MSG_DEBUG, "  * fixed_freq");
+		NLA_PUT_FLAG(msg, NL80211_ATTR_FREQ_FIXED);
+	}
+
+	if (params->beacon_interval > 0) {
+		wpa_printf(MSG_DEBUG, "  * beacon_interval=%d",
+			   params->beacon_interval);
+		NLA_PUT_U32(msg, NL80211_ATTR_BEACON_INTERVAL,
+			    params->beacon_interval);
+	}
+
+	if (params->rates[0] > 0) {
+		wpa_printf(MSG_DEBUG, "  * basic_rates:");
+		i = 0;
+		while (i < NL80211_MAX_SUPP_RATES &&
+		       params->rates[i] > 0) {
+			wpa_printf(MSG_DEBUG, "    %.1f",
+				   (double)params->rates[i] / 2);
+			i++;
+		}
+		NLA_PUT(msg, NL80211_ATTR_BSS_BASIC_RATES, i,
+			params->rates);
+	}
+
+	if (params->mcast_rate > 0) {
+		wpa_printf(MSG_DEBUG, "  * mcast_rates=%.1f",
+			   (double)params->mcast_rate / 10);
+		NLA_PUT_U32(msg, NL80211_ATTR_MCAST_RATE, params->mcast_rate);
+	}
+
+	if (params->ht_set) {
+		switch(params->htmode) {
+			case NL80211_CHAN_HT20:
+				wpa_printf(MSG_DEBUG, "  * ht=HT20");
+				break;
+			case NL80211_CHAN_HT40PLUS:
+				wpa_printf(MSG_DEBUG, "  * ht=HT40+");
+				break;
+			case NL80211_CHAN_HT40MINUS:
+				wpa_printf(MSG_DEBUG, "  * ht=HT40-");
+				break;
+		}
+		NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_CHANNEL_TYPE,
+			    params->htmode);
 	}
 
 	ret = nl80211_set_conn_keys(params, msg);
@@ -8925,12 +8983,7 @@ static int wpa_driver_nl80211_set_mode(struct i802_bss *bss,
 			/* Try to set the mode again while the interface is
 			 * down */
 			ret = nl80211_set_mode(drv, drv->ifindex, nlmode);
-			if (ret == -EACCES)
-				break;
-			res = i802_set_iface_flags(bss, 1);
-			if (res && !ret)
-				ret = -1;
-			else if (ret != -EBUSY)
+			if (ret != -EBUSY)
 				break;
 		} else
 			wpa_printf(MSG_DEBUG, "nl80211: Failed to set "
@@ -8943,6 +8996,8 @@ static int wpa_driver_nl80211_set_mode(struct i802_bss *bss,
 			   "interface is down");
 		drv->nlmode = nlmode;
 		drv->ignore_if_down_event = 1;
+		if (i802_set_iface_flags(bss, 1))
+			ret = -1;
 	}
 
 done:
@@ -10475,7 +10530,6 @@ static int wpa_driver_nl80211_stop_ap(void *priv)
 	if (!is_ap_interface(drv->nlmode))
 		return -1;
 	wpa_driver_nl80211_del_beacon(drv);
-	bss->beacon_set = 0;
 	return 0;
 }
 
@@ -11905,7 +11959,7 @@ static int nl80211_switch_channel(void *priv, struct csa_settings *settings)
 		return -ENOMEM;
 
 	nl80211_cmd(drv, msg, 0, NL80211_CMD_CHANNEL_SWITCH);
-	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, bss->ifindex);
 	NLA_PUT_U32(msg, NL80211_ATTR_CH_SWITCH_COUNT, settings->cs_count);
 	ret = nl80211_put_freq_params(msg, &settings->freq_params);
 	if (ret)
