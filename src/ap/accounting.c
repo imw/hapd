@@ -7,7 +7,8 @@
  */
 
 #include "utils/includes.h"
-
+#include "stdio.h"
+#include "string.h"
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "radius/radius.h"
@@ -148,6 +149,45 @@ static struct radius_msg * accounting_msg(struct hostapd_data *hapd,
 }
 
 
+static int get_station_ip(struct sta_info *sta, u8 *sta_ip_addr)
+{
+	u8 * sta_mac_addr = sta->addr;
+	char sta_ip_addr_str[16];
+	char sta_mac_addr_str[17];
+
+	FILE * fp;
+	char stamp_str[10];
+	char mac_addr_str[18];
+	char ip_addr_str[16];
+	char hostname_str[192];
+	char id_str[20];
+	char window[256];
+
+	snprintf(sta_mac_addr_str, sizeof(mac_addr_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+			sta_mac_addr[0], sta_mac_addr[1], sta_mac_addr[2], sta_mac_addr[3],
+			sta_mac_addr[4], sta_mac_addr[5]);
+
+	if(fp = fopen ("/tmp/dhcp.leases", "r")){
+		while(fgets(window, 256, fp) != NULL) {
+			sscanf(window, "%s %s %s %s %s", stamp_str, mac_addr_str, ip_addr_str,
+					hostname_str, id_str); 
+			if(strcmp(sta_mac_addr_str,mac_addr_str) == 0)
+				strcpy(sta_ip_addr_str, ip_addr_str);	
+		}
+	fclose(fp);
+	}
+	else
+		return 1;
+	
+	
+	sscanf(sta_ip_addr_str, "%hhu.%hhu.%hhu.%hhu", &sta_ip_addr[0], &sta_ip_addr[1],
+						&sta_ip_addr[2], &sta_ip_addr[3]);	
+
+	return 0;
+}
+
+
+
 static int accounting_sta_update_stats(struct hostapd_data *hapd,
 				       struct sta_info *sta,
 				       struct hostap_sta_driver_data *data)
@@ -162,12 +202,17 @@ static int accounting_sta_update_stats(struct hostapd_data *hapd,
 	sta->last_rx_bytes = data->rx_bytes;
 	sta->last_tx_bytes = data->tx_bytes;
 
+	u8 sta_ip[4] = {1, 2, 3, 4};
+	get_station_ip(sta, sta_ip);
+
 	hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_RADIUS,
 		       HOSTAPD_LEVEL_DEBUG, "updated TX/RX stats: "
 		       "Acct-Input-Octets=%lu Acct-Input-Gigawords=%u "
-		       "Acct-Output-Octets=%lu Acct-Output-Gigawords=%u",
+		       "Acct-Output-Octets=%lu Acct-Output-Gigawords=%u"
+		       " Station IP: %d.%d.%d.%d",
 		       sta->last_rx_bytes, sta->acct_input_gigawords,
-		       sta->last_tx_bytes, sta->acct_output_gigawords);
+		       sta->last_tx_bytes, sta->acct_output_gigawords,
+		       sta_ip[0], sta_ip[1], sta_ip[2], sta_ip[3]);
 
 	return 0;
 }
@@ -234,6 +279,8 @@ void accounting_sta_start(struct hostapd_data *hapd, struct sta_info *sta)
 	sta->acct_session_started = 1;
 }
 
+
+	
 
 static void accounting_sta_report(struct hostapd_data *hapd,
 				  struct sta_info *sta, int stop)
@@ -320,6 +367,16 @@ static void accounting_sta_report(struct hostapd_data *hapd,
 		goto fail;
 	}
 
+	u8 sta_ip[4] = {1, 2, 3, 4};
+	get_station_ip(sta, sta_ip);
+
+	if (!radius_msg_add_attr(msg, 
+				 RADIUS_ATTR_FRAMED_IP, 
+				 (u8 *) sta_ip, 4)){
+		wpa_printf(MSG_INFO, "Could not add Station IP");
+		goto fail;
+	}
+
 	if (eloop_terminated())
 		cause = RADIUS_ACCT_TERMINATE_CAUSE_ADMIN_REBOOT;
 
@@ -339,6 +396,8 @@ static void accounting_sta_report(struct hostapd_data *hapd,
  fail:
 	radius_msg_free(msg);
 }
+
+
 
 
 /**

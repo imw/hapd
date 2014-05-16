@@ -1930,7 +1930,8 @@ int ieee802_1x_init(struct hostapd_data *hapd)
 	if ((hapd->conf->ieee802_1x || hapd->conf->wpa) &&
 	    hostapd_set_drv_ieee8021x(hapd, hapd->conf->iface, 1))
 		return -1;
-
+	
+	
 #ifndef CONFIG_NO_RADIUS
 	if (radius_client_register(hapd->radius, RADIUS_AUTH,
 				   ieee802_1x_receive_auth, hapd))
