@@ -13,6 +13,7 @@
 #include "crypto/md5.h"
 #include "crypto/crypto.h"
 #include "radius.h"
+#include "ap/ap_config.h"
 
 
 /**
@@ -232,7 +233,8 @@ static struct radius_attr_type radius_attrs[] =
 	  RADIUS_ATTR_TEXT },
 	{ RADIUS_ATTR_NAS_IPV6_ADDRESS, "NAS-IPv6-Address", RADIUS_ATTR_IPV6 },
 	{ RADIUS_ATTR_ERROR_CAUSE, "Error-Cause", RADIUS_ATTR_INT32 },
-	{ RADIUS_ATTR_FRAMED_IP, "Framed IP", RADIUS_ATTR_IP }
+	{ RADIUS_ATTR_FRAMED_IP, "Framed-IP", RADIUS_ATTR_IP },
+	{ RADIUS_ATTR_FRAMED_ROUTE, "Framed-Route", RADIUS_ATTR_TEXT }
 };
 #define RADIUS_ATTRS ARRAY_SIZE(radius_attrs)
 
@@ -1459,6 +1461,38 @@ int radius_msg_get_vlanid(struct radius_msg *msg)
 	return -1;
 }
 
+#ifdef CONFIG_DYNAMIC_ROUTING
+struct hostapd_route * radius_msg_get_route(struct radius_msg *msg)
+{
+	char route_str[64];
+	size_t i = 0;
+	struct radius_attr_hdr *attr = NULL;
+        const u8 *payload;
+        size_t pl_len;
+
+
+
+	struct hostapd_route *route;
+	route = os_zalloc(sizeof(*route));
+
+
+        for (i = 0; i < msg->attr_used; i++) {
+                attr = radius_get_attr_hdr(msg, i);
+                if (attr == NULL ||
+                    attr->type != RADIUS_ATTR_FRAMED_ROUTE) {
+                        continue;
+                }
+                payload = (const u8 *) (attr + 1);
+                pl_len = attr->length - sizeof(*attr);
+                break;
+        }
+
+	os_strlcpy(route->gw, payload, (pl_len+1));
+
+	return route;
+
+}
+#endif /* CONFIG_DYNAMIC_ROUTING */
 
 /**
  * radius_msg_get_tunnel_password - Parse RADIUS attribute Tunnel-Password

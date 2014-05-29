@@ -1526,6 +1526,28 @@ ieee802_1x_receive_auth(struct radius_msg *msg, struct radius_msg *req,
 		if (ap_sta_bind_vlan(hapd, sta, old_vlanid) < 0)
 			break;
 
+#ifdef CONFIG_DYNAMIC_ROUTING
+		struct hostapd_route *route = radius_msg_get_route(msg);
+		route->vlan_id = sta->vlan_id;
+		if (hapd->conf->dynamic_routing == DYNAMIC_ROUTING_DISABLED)
+			break;
+		else if (hapd->conf->dynamic_routing == DYNAMIC_ROUTING_REQUIRED &&
+				!hostapd_route_valid(route))
+			hostapd_logger(hapd, sta->addr,
+					HOSTAPD_MODULE_IEEE8021X,
+					HOSTAPD_LEVEL_INFO, "authentication "
+					"server did not include required "
+					"dynamic route");
+		else if ( strcmp(hapd->conf->route->gw, "NULL")) {
+			route->next = hapd->conf->route;
+			hapd->conf->route = route;
+		}
+		else
+			hapd->conf->route = route;
+
+#endif /* CONFIG_DYNAMIC_ROUTING */
+
+
 		/* RFC 3580, Ch. 3.17 */
 		if (session_timeout_set && termination_action ==
 		    RADIUS_TERMINATION_ACTION_RADIUS_REQUEST) {

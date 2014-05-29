@@ -35,6 +35,24 @@ static void hostapd_config_free_vlan(struct hostapd_bss_config *bss)
 	bss->vlan = NULL;
 }
 
+#ifdef CONFIG_DYNAMIC_ROUTING
+
+static void hostapd_config_free_route(struct hostapd_bss_config *bss)
+{
+	struct hostapd_route *route, *prev;
+
+	route = bss->route;
+	while(route) {
+		prev = route;
+		route = route->next;
+		os_free(prev);
+	}
+
+
+	bss->route = NULL;
+}
+
+#endif /* CONFIG_DYNAMIC_ROUTING */
 
 void hostapd_config_defaults_bss(struct hostapd_bss_config *bss)
 {
@@ -415,6 +433,9 @@ void hostapd_config_free_bss(struct hostapd_bss_config *conf)
 #ifdef CONFIG_FULL_DYNAMIC_VLAN
 	os_free(conf->ssid.vlan_tagged_interface);
 #endif /* CONFIG_FULL_DYNAMIC_VLAN */
+#ifdef CONFIG_DYNAMIC_ROUTING
+	os_free(&conf->dynamic_routing);
+#endif /* CONFIG_DYNAMIC_ROUTING */
 
 	user = conf->eap_user;
 	while (user) {
@@ -454,6 +475,9 @@ void hostapd_config_free_bss(struct hostapd_bss_config *conf)
 	os_free(conf->radius_das_shared_secret);
 	hostapd_config_free_vlan(conf);
 	os_free(conf->time_zone);
+#ifdef CONFIG_DYNAMIC_ROUTING
+	hostapd_config_free_route(conf);
+#endif /* CONFIG_DYNAMIC_ROUTING
 
 #ifdef CONFIG_IEEE80211R
 	{
@@ -630,6 +654,44 @@ int hostapd_vlan_id_valid(struct hostapd_vlan *vlan, int vlan_id)
 	}
 	return 0;
 }
+
+#ifdef CONFIG_DYNAMIC_ROUTING
+int validate_gw_string(char* name, uint32_t field_len)
+{
+        uint32_t i, string_len = strlen(name);
+	int status = 0;
+
+
+        if (field_len && (string_len >= field_len || (strlen(name) == 0)))
+		return -1;
+
+        for (i = 0; i < string_len; i++) {
+
+                char c = name[i];
+
+                if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        c == '-' || c == '_' || (c == '.' && (i != 0 && i != (string_len - 1))))
+                        continue;
+		else
+			status = -1;
+
+        }
+
+        return status;
+}
+
+
+
+int hostapd_route_valid(struct hostapd_route *route)
+{
+	if(route->vlan_id < 0 || route->vlan_id > 4096)
+		return -1;
+	if(validate_gw_string(route->gw, 64))
+		return -1;
+
+	return 0;
+}
+#endif /* CONFIG_DYNAMIC_ROUTING*/
 
 
 const char * hostapd_get_vlan_id_ifname(struct hostapd_vlan *vlan, int vlan_id)

@@ -75,10 +75,21 @@ struct hostapd_ssid {
 #define DYNAMIC_VLAN_NAMING_EXPLICIT 2
 #define DYNAMIC_VLAN_NAMING_END 3
 	int vlan_naming;
+
 #ifdef CONFIG_FULL_DYNAMIC_VLAN
 	char *vlan_tagged_interface;
 #endif /* CONFIG_FULL_DYNAMIC_VLAN */
+
+
 };
+
+#ifdef CONFIG_DYNAMIC_ROUTING
+struct hostapd_route {
+	struct hostapd_route *next;
+	int vlan_id;
+	char gw[64];
+};
+#endif /* CONFIG_DYNAMIC_ROUTING */
 
 
 #define VLAN_ID_WILDCARD -1
@@ -219,6 +230,15 @@ struct hostapd_bss_config {
 	u8 *radius_das_shared_secret;
 	size_t radius_das_shared_secret_len;
 
+	#ifdef CONFIG_DYNAMIC_ROUTING
+	#define DYNAMIC_ROUTING_DISABLED 0
+	#define DYNAMIC_ROUTING_OPTIONAL 1
+	#define DYNAMIC_ROUTING_REQUIRED 2
+	int dynamic_routing;
+	#endif /* CONFIG_DYNAMIC_ROUTING */
+
+
+
 	struct hostapd_ssid ssid;
 
 	char *eap_req_id_text; /* optional displayable message sent with
@@ -333,8 +353,11 @@ struct hostapd_bss_config {
 	int wmm_enabled;
 	int wmm_uapsd;
 
-	struct hostapd_vlan *vlan;
+#ifdef CONFIG_DYNAMIC_ROUTING
+        struct hostapd_route *route;
+#endif /*CONFIG_DYNAMIC_ROUTING*/
 
+	struct hostapd_vlan *vlan;
 	macaddr bssid;
 
 	/*
@@ -619,6 +642,9 @@ const u8 * hostapd_get_psk(const struct hostapd_bss_config *conf,
 			   const u8 *prev_psk);
 int hostapd_setup_wpa_psk(struct hostapd_bss_config *conf);
 int hostapd_vlan_id_valid(struct hostapd_vlan *vlan, int vlan_id);
+#ifdef CONFIG_DYNAMIC_ROUTING
+int hostapd_route_valid(struct hostapd_route *route);
+#endif /* CONFIG_DYNAMIC_ROUTING */
 const char * hostapd_get_vlan_id_ifname(struct hostapd_vlan *vlan,
 					int vlan_id);
 struct hostapd_radius_attr *

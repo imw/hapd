@@ -157,12 +157,18 @@ ifdef CONFIG_NO_VLAN
 CFLAGS += -DCONFIG_NO_VLAN
 else
 OBJS += ../src/ap/vlan_init.o
+
 ifdef CONFIG_VLAN_NETLINK
 ifdef CONFIG_FULL_DYNAMIC_VLAN
 OBJS += ../src/ap/vlan_util.o
 endif
 CFLAGS += -DCONFIG_VLAN_NETLINK
 endif
+endif
+
+ifdef CONFIG_DYNAMIC_ROUTING
+OBJS += ../src/ap/route_util.o
+CFLAGS += -DCONFIG_DYNAMIC_ROUTING
 endif
 
 ifdef CONFIG_NO_CTRL_IFACE

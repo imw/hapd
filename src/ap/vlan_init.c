@@ -16,11 +16,13 @@
 #include "ap_drv_ops.h"
 #include "vlan_init.h"
 #include "vlan_util.h"
+#include "route_util.h"
 
 
 #ifdef CONFIG_FULL_DYNAMIC_VLAN
 
 #include <net/if.h>
+#include <net/route.h>
 #include <sys/ioctl.h>
 #include <linux/sockios.h>
 #include <linux/if_vlan.h>
@@ -471,23 +473,31 @@ static int vlan_set_name_type(unsigned int name_type)
 	return 0;
 }
 
-#endif /* CONFIG_VLAN_NETLINK */
 
+#endif /* CONFIG_VLAN_NETLINK */
 
 static void vlan_newlink(char *ifname, struct hostapd_data *hapd)
 {
 	char vlan_ifname[IFNAMSIZ];
 	char br_name[IFNAMSIZ];
-	struct hostapd_vlan *vlan = hapd->conf->vlan;
+
 	char *tagged_interface = hapd->conf->ssid.vlan_tagged_interface;
 	int vlan_naming = hapd->conf->ssid.vlan_naming;
+	int dynamic_routing = hapd->conf->dynamic_routing;
+
+	struct hostapd_vlan *vlan = hapd->conf->vlan;
+	struct hostapd_route *route = hapd->conf->route;
+
+	char *dst;
+	int dstmask;
+	char *gw;
+	int gwmask;
 
 	wpa_printf(MSG_DEBUG, "VLAN: vlan_newlink(%s)", ifname);
 
 	while (vlan) {
 		if (os_strcmp(ifname, vlan->ifname) == 0) {
-			if (vlan_naming == DYNAMIC_VLAN_NAMING_EXPLICIT &&
-			      hapd->conf->vlan_bridge[0]){
+			if (vlan_naming == DYNAMIC_VLAN_NAMING_EXPLICIT){
 				os_snprintf(br_name, sizeof(br_name), "%s",
 					    hapd->conf->vlan_bridge);
 			} else if (hapd->conf->vlan_bridge[0]) {
@@ -515,8 +525,7 @@ static void vlan_newlink(char *ifname, struct hostapd_data *hapd)
 
 
 			if (tagged_interface) {
-				if (vlan_naming ==
-				    DYNAMIC_VLAN_NAMING_EXPLICIT){
+				if (vlan_naming == DYNAMIC_VLAN_NAMING_EXPLICIT){
 					os_snprintf(vlan_ifname,
 						    sizeof(vlan_ifname),
 						    "%s.%d", tagged_interface,
@@ -550,6 +559,19 @@ static void vlan_newlink(char *ifname, struct hostapd_data *hapd)
 
 			ifconfig_up(ifname);
 
+#ifdef CONFIG_DYNAMIC_ROUTING
+			if (dynamic_routing) {
+				while(route) {
+					if(route->vlan_id == vlan->vlan_id){
+						rt_route(0, vlan->vlan_id, route->gw);
+						rt_mark(0, vlan->vlan_id, ifname);
+						rt_rule(0, vlan->vlan_id);
+					}
+				route = route->next;
+				}
+			}
+#endif //CONFIG_DYNAMIC_ROUTING
+
 			break;
 		}
 		vlan = vlan->next;
@@ -562,8 +584,12 @@ static void vlan_dellink(char *ifname, struct hostapd_data *hapd)
 	char vlan_ifname[IFNAMSIZ];
 	char br_name[IFNAMSIZ];
 	struct hostapd_vlan *first, *prev, *vlan = hapd->conf->vlan;
+	struct hostapd_route *route = hapd->conf->route;
 	char *tagged_interface = hapd->conf->ssid.vlan_tagged_interface;
 	int vlan_naming = hapd->conf->ssid.vlan_naming;
+	int dynamic_routing = hapd->conf->dynamic_routing;
+
+
 
 	wpa_printf(MSG_DEBUG, "VLAN: vlan_dellink(%s)", ifname);
 
@@ -571,7 +597,10 @@ static void vlan_dellink(char *ifname, struct hostapd_data *hapd)
 
 	while (vlan) {
 		if (os_strcmp(ifname, vlan->ifname) == 0) {
-			if (hapd->conf->vlan_bridge[0]) {
+			if (vlan_naming == DYNAMIC_VLAN_NAMING_EXPLICIT){
+				os_snprintf(br_name, sizeof(br_name), "%s",
+					    hapd->conf->vlan_bridge);
+			} else if (hapd->conf->vlan_bridge[0]) {
 				os_snprintf(br_name, sizeof(br_name), "%s%d",
 					    hapd->conf->vlan_bridge,
 					    vlan->vlan_id);
@@ -588,7 +617,12 @@ static void vlan_dellink(char *ifname, struct hostapd_data *hapd)
 				br_delif(br_name, vlan->ifname);
 
 			if (tagged_interface) {
-				if (vlan_naming ==
+				if (vlan_naming == DYNAMIC_VLAN_NAMING_EXPLICIT){
+					os_snprintf(vlan_ifname,
+						    sizeof(vlan_ifname),
+						    "%s.%d", tagged_interface,
+						    vlan->vlan_id);
+				} else if (vlan_naming ==
 				    DYNAMIC_VLAN_NAMING_WITH_DEVICE)
 					os_snprintf(vlan_ifname,
 						    sizeof(vlan_ifname),
@@ -611,6 +645,19 @@ static void vlan_dellink(char *ifname, struct hostapd_data *hapd)
 				ifconfig_down(br_name);
 				br_delbr(br_name);
 			}
+#ifdef CONFIG_DYNAMIC_ROUTING
+			if (dynamic_routing) {
+				while(route) {
+					if(route->vlan_id == vlan->vlan_id){
+						rt_route(1, vlan->vlan_id, route->gw);
+						rt_mark(1, vlan->vlan_id, ifname);
+						rt_rule(1, vlan->vlan_id);
+					}
+				route = route->next;
+				}
+			}
+#endif //CONFIG_DYNAMIC_ROUTING
+
 
 			if (vlan == first) {
 				hapd->conf->vlan = vlan->next;

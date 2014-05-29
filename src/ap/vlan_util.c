@@ -10,16 +10,20 @@
 #include <sys/ioctl.h>
 #include <linux/sockios.h>
 #include <linux/if_vlan.h>
+
+#ifdef CONFIG_VLAN_NETLINK
 #include <netlink/genl/genl.h>
 #include <netlink/genl/family.h>
 #include <netlink/genl/ctrl.h>
 #include <netlink/route/link.h>
 #include <netlink/route/link/vlan.h>
+#endif /* CONFIG_VLAN_NETLINK */
 
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "hostapd.h"
 #include "vlan_util.h"
+#include "route_util.h"
 
 /*
  * Add a vlan interface with name 'vlan_if_name', VLAN ID 'vid' and

@@ -55,6 +55,7 @@ enum { RADIUS_ATTR_USER_NAME = 1,
        RADIUS_ATTR_FRAMED_IP = 8,
        RADIUS_ATTR_FRAMED_MTU = 12,
        RADIUS_ATTR_REPLY_MESSAGE = 18,
+       RADIUS_ATTR_FRAMED_ROUTE = 22,
        RADIUS_ATTR_STATE = 24,
        RADIUS_ATTR_CLASS = 25,
        RADIUS_ATTR_VENDOR_SPECIFIC = 26,
@@ -262,6 +263,7 @@ radius_msg_add_attr_user_password(struct radius_msg *msg,
 				  const u8 *secret, size_t secret_len);
 int radius_msg_get_attr(struct radius_msg *msg, u8 type, u8 *buf, size_t len);
 int radius_msg_get_vlanid(struct radius_msg *msg);
+struct hostapd_route * radius_msg_get_route(struct radius_msg *msg);
 char * radius_msg_get_tunnel_password(struct radius_msg *msg, int *keylen,
 				      const u8 *secret, size_t secret_len,
 				      struct radius_msg *sent_msg, size_t n);

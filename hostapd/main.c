@@ -29,7 +29,6 @@
 #include "eap_register.h"
 #include "ctrl_iface.h"
 
-
 struct hapd_global {
 	void **drv_priv;
 	size_t drv_count;
